@@ -1,6 +1,19 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { BranchingResponse, GroundingSource } from "../types";
+
+/**
+ * Handles the "entity not found" error by prompting for a key selection
+ */
+const handleApiError = async (error: any) => {
+  console.error("Gemini API Error:", error);
+  if (error?.message?.includes("Requested entity was not found") || error?.message?.includes("API_KEY")) {
+    if (typeof window !== 'undefined' && (window as any).aistudio) {
+      await (window as any).aistudio.openSelectKey();
+    }
+  }
+  throw error;
+};
 
 export const getTopicInfo = async (
   concept: string
@@ -33,7 +46,7 @@ export const getTopicInfo = async (
       sources 
     };
   } catch (error) {
-    console.error("Gemini Topic Info Error:", error);
+    await handleApiError(error);
     return { description: "Explore the connections and history of this concept.", sources: [] };
   }
 };
@@ -45,6 +58,7 @@ export const getRelatedTopics = async (
   excludeTopics: string[] = [],
   useThinking: boolean = false
 ): Promise<{ topics: BranchingResponse[], sources: GroundingSource[] }> => {
+  // Always create a new instance right before the call to ensure the latest API Key is used
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const contextDescription = contextPath.length > 0 
@@ -56,7 +70,8 @@ export const getRelatedTopics = async (
     : "";
 
   try {
-    // Using gemini-3-pro-preview for branches to ensure better Tool Use (Google Search)
+    // When using googleSearch, do NOT use responseMimeType: "application/json" 
+    // because the response text will contain grounding citations.
     const response = await ai.models.generateContent({
       model: "gemini-3-pro-preview",
       contents: `
@@ -65,36 +80,21 @@ export const getRelatedTopics = async (
         
         TASK:
         1. Use Google Search to find exactly ${count} NEW distinct and high-level topics branching from "${concept}".
-        2. Provide a one-sentence factual insight for each topic based on your search results.
-        3. Ensure suggestions are unique and specific.
+        2. For each topic, provide a one-sentence factual insight.
         
-        Return the result as a JSON object with a "topics" array.
+        FORMAT YOUR RESPONSE EXACTLY LIKE THIS FOR EACH TOPIC:
+        ## TOPIC: [Name]
+        ## DESC: [One sentence insight]
+        
+        Ensure suggestions are unique and specific.
       `,
       config: {
         tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
         thinkingConfig: useThinking ? { thinkingBudget: 4000 } : undefined,
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            topics: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  topic: { type: Type.STRING },
-                  description: { type: Type.STRING }
-                },
-                required: ["topic", "description"]
-              }
-            }
-          },
-          required: ["topics"]
-        }
       },
     });
 
-    // Extract grounding sources from the Pro model response
+    // Extract grounding sources
     const sources: GroundingSource[] = [];
     const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
     if (chunks) {
@@ -109,29 +109,35 @@ export const getRelatedTopics = async (
     }
 
     const text = response.text || "";
-    let jsonStr = text.trim();
+    const topics: BranchingResponse[] = [];
     
-    // Safety for potential markdown backticks in response
-    if (jsonStr.includes("```json")) {
-      jsonStr = jsonStr.split("```json")[1].split("```")[0].trim();
-    } else if (jsonStr.includes("```")) {
-      jsonStr = jsonStr.split("```")[1].split("```")[0].trim();
+    // Manual parsing of the structured text format
+    const topicBlocks = text.split(/## TOPIC:/g).filter(block => block.trim().length > 0);
+    
+    topicBlocks.forEach(block => {
+      const lines = block.split('\n');
+      const topicName = lines[0].trim();
+      const descLine = lines.find(l => l.includes('## DESC:'));
+      if (topicName && descLine) {
+        topics.push({
+          topic: topicName,
+          description: descLine.replace('## DESC:', '').trim()
+        });
+      }
+    });
+
+    // If parsing failed, try a simpler fallback for safety
+    if (topics.length === 0) {
+      throw new Error("Failed to parse search results into topics.");
     }
-    
-    const data = JSON.parse(jsonStr);
+
     return { 
-      topics: (data.topics || []).slice(0, count), 
+      topics: topics.slice(0, count), 
       sources 
     };
   } catch (error) {
-    console.error("Gemini Branching Error:", error);
-    return {
-      topics: [
-        { topic: `${concept} Dynamics`, description: "Exploring the fundamental forces within this field." },
-        { topic: `${concept} Evolution`, description: "Tracing historical development and trajectory." },
-        { topic: `${concept} Context`, description: "Analyzing the broader social and technical environment." }
-      ].slice(0, count),
-      sources: []
-    };
+    await handleApiError(error);
+    // Rethrow to let the UI handle the error state instead of generic fallbacks
+    throw error;
   }
 };
