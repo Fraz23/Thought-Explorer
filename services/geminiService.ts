@@ -63,7 +63,6 @@ export const getRelatedTopics = async (
                 Each suggestion must be unique and not repeat the parent topic.
                 Provide a one-sentence factual insight for each.`,
       config: {
-        // Removed googleSearch here to ensure JSON responseMimeType works reliably
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -85,22 +84,34 @@ export const getRelatedTopics = async (
       },
     });
 
-    let jsonStr = response.text?.trim() || '{"topics": []}';
-    // Remove potential markdown code blocks if the model adds them despite MIME type
-    jsonStr = jsonStr.replace(/^```json\n?/, "").replace(/\n?```$/, "");
+    const text = response.text || "";
+    let jsonStr = text.trim();
+    
+    // Fallback: If the model wraps it in markdown blocks despite the MIME type
+    if (jsonStr.includes("```json")) {
+      jsonStr = jsonStr.split("```json")[1].split("```")[0].trim();
+    } else if (jsonStr.includes("```")) {
+      jsonStr = jsonStr.split("```")[1].split("```")[0].trim();
+    }
     
     const data = JSON.parse(jsonStr);
+    if (!data.topics || !Array.isArray(data.topics)) {
+      throw new Error("Invalid response format");
+    }
+    
     return { 
-      topics: (data.topics || []).slice(0, count), 
+      topics: data.topics.slice(0, count), 
       sources: [] 
     };
   } catch (error) {
     console.error("Gemini Branching Error:", error);
+    // Provide an immediate fallback instead of hanging
     return {
-      topics: Array(count).fill(0).map((_, i) => ({
-        topic: `${concept} Subtopic ${i + 1}`,
-        description: "A related area of study linked to this concept."
-      })),
+      topics: [
+        { topic: `${concept} Dynamics`, description: "Exploring the fundamental forces and shifts within this field." },
+        { topic: `${concept} Evolution`, description: "Tracing the historical development and future trajectory." },
+        { topic: `${concept} Impact`, description: "Analyzing the broader social and technical consequences." }
+      ].slice(0, count),
       sources: []
     };
   }

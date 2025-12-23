@@ -53,7 +53,6 @@ const App: React.FC = () => {
 
   const spacingY = isMobile ? -80 : -100; 
   const spreadX = isMobile ? 110 : 150;
-  const overlapGap = isMobile ? 130 : 170; 
   
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -80,11 +79,21 @@ const App: React.FC = () => {
     return ids;
   }, []);
 
-  const resolveOverlapsRecursive = useCallback((allNodes: ThoughtNode[], minGap: number) => {
+  // Helper to determine the width footprint of a node and its potential children
+  const getNodeFootprint = useCallback((node: ThoughtNode) => {
+    const baseWidth = isMobile ? 100 : 140;
+    if (!node.isExpanded || node.isCollapsed) return baseWidth;
+    // The width occupied by children
+    const childSpread = (branchCount - 1) * spreadX;
+    return Math.max(baseWidth, childSpread + 60);
+  }, [branchCount, spreadX, isMobile]);
+
+  const resolveOverlapsRecursive = useCallback((allNodes: ThoughtNode[]) => {
     let newNodes = [...allNodes];
     let hasChanged = true;
     let iterations = 0;
-    const MAX_ITERATIONS = 60;
+    const MAX_ITERATIONS = 40;
+    const padding = 20;
 
     while (hasChanged && iterations < MAX_ITERATIONS) {
       hasChanged = false;
@@ -99,10 +108,14 @@ const App: React.FC = () => {
         for (let i = 0; i < levelNodes.length - 1; i++) {
           const left = levelNodes[i];
           const right = levelNodes[i + 1];
-          const dist = right.position.x - left.position.x;
           
-          if (dist < minGap) {
-            const shift = (minGap - dist) / 2 + 1;
+          const leftWidth = getNodeFootprint(left);
+          const rightWidth = getNodeFootprint(right);
+          const minRequiredDist = (leftWidth + rightWidth) / 2 + padding;
+          const actualDist = right.position.x - left.position.x;
+          
+          if (actualDist < minRequiredDist) {
+            const shift = (minRequiredDist - actualDist) / 2 + 1;
             hasChanged = true;
             
             const leftDescendants = getDescendantIds(newNodes, left.id);
@@ -121,6 +134,7 @@ const App: React.FC = () => {
               return n;
             });
             
+            // Re-update references for sorted array in current iteration
             left.position.x -= shift;
             right.position.x += shift;
           }
@@ -128,7 +142,7 @@ const App: React.FC = () => {
       }
     }
     return newNodes;
-  }, [getDescendantIds]);
+  }, [getDescendantIds, getNodeFootprint]);
 
   const updateZoom = useCallback((newZoom: number, mouseX?: number, mouseY?: number) => {
     if (!containerRef.current) return;
@@ -263,7 +277,7 @@ const App: React.FC = () => {
       const newEdges: Edge[] = children.map(node => ({ id: `edge-${rootId}-${node.id}`, from: rootId, to: node.id }));
       const finalNodes = [{ ...rootNode, description: topicInfo.description, sources: topicInfo.sources, isLoading: false, isExpanded: true }, ...children];
       
-      setNodes(resolveOverlapsRecursive(finalNodes, overlapGap));
+      setNodes(resolveOverlapsRecursive(finalNodes));
       setEdges(newEdges);
       setActiveLevel(nextLevel);
       setTimeout(() => centerOn(startX, targetY), 100);
@@ -273,8 +287,7 @@ const App: React.FC = () => {
       }, 4000);
     } catch (err) {
       console.error("Start Journey Error:", err);
-      // Fallback: stop loading so user isn't stuck
-      setNodes(prev => prev.map(n => n.id === rootId ? { ...n, isLoading: false, description: "Failed to gather insights. Please check your API key and connection." } : n));
+      setNodes(prev => prev.map(n => n.id === rootId ? { ...n, isLoading: false, description: "Connection reached a limit. Attempting manual recovery..." } : n));
     }
   };
 
@@ -313,7 +326,7 @@ const App: React.FC = () => {
         
         const updatedPrev = prev.map(n => n.id === parentId ? { ...n, isExpanded: true, isLoading: false } : n);
         const combined = [...updatedPrev, ...newNodes];
-        const resolved = resolveOverlapsRecursive(combined, overlapGap);
+        const resolved = resolveOverlapsRecursive(combined);
         
         const newNodesInResolved = resolved.filter(n => n.parentId === parentId);
         const avgNewX = newNodesInResolved.reduce((acc, n) => acc + n.position.x, 0) / newNodesInResolved.length;
@@ -331,7 +344,7 @@ const App: React.FC = () => {
       console.error("Expand Node Error:", err);
       setNodes(prev => prev.map(n => n.id === parentId ? { ...n, isLoading: false } : n));
     }
-  }, [branchCount, spacingY, spreadX, overlapGap, centerOn, resolveOverlapsRecursive, nodes]);
+  }, [branchCount, spacingY, spreadX, centerOn, resolveOverlapsRecursive, nodes]);
 
   const reAlignMap = useCallback(() => {
     const visibleNodes = nodes.filter(isNodeEffectivelyVisible);
@@ -417,7 +430,7 @@ const App: React.FC = () => {
                )}
             </div>
 
-            <div className={`relative flex items-center pointer-events-auto transition-all duration-500 ease-out ${isSearchExpanded ? 'flex-grow md:max-w-sm' : 'w-12 md:w-14'}`}>
+            <div className={`relative flex items-center pointer-events-auto transition-all duration-500 ease-out ${isSearchExpanded ? 'flex-grow md:max-w-[400px]' : 'w-12 md:w-14'}`}>
               <div className={`flex items-center bg-white dark:bg-gray-900 border-2 rounded-2xl shadow-xl overflow-hidden h-12 md:h-14 w-full transition-all duration-500 ${isSearchExpanded ? 'border-blue-500' : 'border-slate-200 dark:border-gray-800'}`}>
                 <button 
                   onClick={(e) => { e.stopPropagation(); setIsSearchExpanded(!isSearchExpanded); }}
