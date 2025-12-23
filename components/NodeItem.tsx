@@ -101,77 +101,67 @@ export const NodeItem: React.FC<NodeItemProps> = ({
       onMouseDown={handleMouseDown}
       className={`absolute group ${node.isNew ? 'animate-node-pop' : ''} ${isEditMode ? 'cursor-move' : ''}`}
     >
-      {/* Edit Mode Controls (Delete and Hide) - Only show on hover or selection */}
+      {/* Edit Mode Controls */}
       {isEditMode && (
         <div 
-          className={`absolute -top-10 left-1/2 -translate-x-1/2 flex items-center space-x-2 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-800 shadow-xl z-[2000] transition-all duration-300 transform
+          className={`absolute -top-12 left-1/2 -translate-x-1/2 flex items-center space-x-2 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-800 shadow-xl z-[2000] transition-all duration-300 transform
             ${isSelected ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto' : 'opacity-0 translate-y-2 scale-90 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:scale-100 group-hover:pointer-events-auto'}
           `}
         >
           <button 
             onClick={(e) => { e.stopPropagation(); onToggleHide?.(node.id); }}
             className={`p-1.5 rounded-full transition-colors ${node.isHidden ? 'bg-amber-100 text-amber-600' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-blue-500'}`}
-            title={node.isHidden ? "Unhide" : "Hide"}
           >
             {node.isHidden ? (
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
-              </svg>
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" /></svg>
             ) : (
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
             )}
           </button>
           <div className="w-px h-3 bg-slate-200 dark:bg-slate-800" />
           <button 
             onClick={(e) => { e.stopPropagation(); onPrune(node.id); }}
             className="p-1.5 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-colors"
-            title="Delete Node"
           >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
           </button>
         </div>
       )}
 
-      {/* Insight Panel - High Clarity, No Blur */}
-      <div className={`absolute left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-[1100] transition-all duration-300 ${panelDirection === 'above' ? 'bottom-[calc(100%+16px)]' : 'top-[calc(100%+16px)]'}`}>
+      {/* Insight Panel */}
+      <div className={`absolute left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-[1100] transition-all duration-300 ${panelDirection === 'above' ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+8px)]'}`}>
         {infoPanelVisible && (
-          <div className={`relative w-[calc(100vw-48px)] max-w-[340px] md:max-w-md bg-white dark:bg-[#0f172a] border-2 border-slate-200 dark:border-slate-700 p-6 rounded-[2rem] shadow-[0_25px_60px_rgba(0,0,0,0.5)] dark:shadow-[0_25px_60px_rgba(0,0,0,0.8)] animate-panel-in pointer-events-auto ${panelDirection === 'above' ? 'origin-bottom' : 'origin-top'}`}>
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">Fact Insight</span>
-              <div className="flex items-center space-x-2">
-                {/* Fold/Unfold Logic - Using text labels instead of icons */}
+          <div className={`relative w-[calc(100vw-48px)] max-w-[340px] md:max-w-md bg-white dark:bg-[#0f172a] border-2 border-slate-200 dark:border-slate-700 p-4 rounded-[1.4rem] shadow-[0_25px_60px_rgba(0,0,0,0.5)] dark:shadow-[0_25px_60px_rgba(0,0,0,0.8)] animate-panel-in pointer-events-auto ${panelDirection === 'above' ? 'origin-bottom' : 'origin-top'}`}>
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">Fact Insight</span>
+              <div className="flex items-center space-x-1.5">
                 {node.isExpanded && (
                   <button 
                     onClick={(e) => { e.stopPropagation(); onToggleCollapse?.(node.id); }} 
-                    className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${node.isCollapsed ? 'bg-amber-100 text-amber-600 hover:bg-amber-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-blue-600'}`}
+                    className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${node.isCollapsed ? 'bg-amber-100 text-amber-600 hover:bg-amber-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-blue-600'}`}
                   >
                     {node.isCollapsed ? 'Unfold' : 'Fold'}
                   </button>
                 )}
                 
                 {!node.isExpanded ? (
-                  <button onClick={(e) => { e.stopPropagation(); onBranch(); }} className="px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-500 transition-colors">Branch</button>
+                  <button onClick={(e) => { e.stopPropagation(); onBranch(); }} className="px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-500 transition-colors">Branch</button>
                 ) : (
-                  <button onClick={(e) => { e.stopPropagation(); onExploreFurther?.(); }} className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all">+</button>
+                  <button onClick={(e) => { e.stopPropagation(); onExploreFurther?.(); }} className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all text-xs font-bold">+</button>
                 )}
-                <button onClick={openSearch} className="p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-blue-600 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg></button>
+                <button onClick={openSearch} className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-blue-600 transition-colors"><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg></button>
               </div>
             </div>
-            <p className="text-sm text-slate-800 dark:text-slate-100 font-medium leading-relaxed mb-4">{node.description}</p>
+            <p className="text-xs text-slate-800 dark:text-slate-100 font-medium leading-relaxed mb-3">{node.description}</p>
             {node.sources && node.sources.length > 0 && (
-              <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
-                <button onClick={(e) => { e.stopPropagation(); setSourcesExpanded(!sourcesExpanded); }} className="flex items-center justify-between w-full text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+              <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
+                <button onClick={(e) => { e.stopPropagation(); setSourcesExpanded(!sourcesExpanded); }} className="flex items-center justify-between w-full text-[8px] font-bold text-slate-400 uppercase tracking-widest">
                   <span>Sources ({node.sources.length})</span>
-                  <svg className={`w-3 h-3 transition-transform ${sourcesExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path d="M19 9l-7 7-7-7" /></svg>
+                  <svg className={`w-2.5 h-2.5 transition-transform ${sourcesExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path d="M19 9l-7 7-7-7" /></svg>
                 </button>
                 {sourcesExpanded && (
-                  <div className="mt-2 space-y-1 max-h-32 overflow-y-auto pr-2">
-                    {node.sources.map((s, i) => (<a key={i} href={s.uri} target="_blank" rel="noopener noreferrer" className="block text-[10px] text-blue-600 dark:text-blue-400 font-bold hover:underline py-1 truncate">{s.title}</a>))}
+                  <div className="mt-1.5 space-y-1 max-h-24 overflow-y-auto pr-1">
+                    {node.sources.map((s, i) => (<a key={i} href={s.uri} target="_blank" rel="noopener noreferrer" className="block text-[9px] text-blue-600 dark:text-blue-400 font-bold hover:underline py-0.5 truncate">{s.title}</a>))}
                   </div>
                 )}
               </div>
@@ -180,23 +170,22 @@ export const NodeItem: React.FC<NodeItemProps> = ({
         )}
       </div>
 
-      {/* Node Card */}
+      {/* Node Card - Extra Compacted for "almost touching" effect */}
       <div onClick={(e) => { e.stopPropagation(); if(!isEditMode) onClick(node.id); }}
-        className={`relative flex flex-col items-center justify-center min-w-[120px] md:min-w-[180px] max-w-[260px] px-6 md:px-10 py-5 md:py-8 rounded-[2.2rem] transition-all duration-300 cursor-pointer border-2 backdrop-blur-md ${isSelected ? 'bg-blue-50 dark:bg-blue-900/40 border-blue-500 shadow-3xl' : 'bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-800 shadow-xl'} ${isEditMode ? 'border-dashed border-emerald-500 ring-2 ring-emerald-500/20' : ''}`}
+        className={`relative flex flex-col items-center justify-center min-w-[85px] md:min-w-[115px] max-w-[180px] px-2.5 md:px-4 py-2 md:py-3.5 rounded-[1rem] transition-all duration-300 cursor-pointer border-2 backdrop-blur-md ${isSelected ? 'bg-blue-50 dark:bg-blue-900/40 border-blue-500 shadow-2xl scale-105' : 'bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-800 shadow-lg'} ${isEditMode ? 'border-dashed border-emerald-500 ring-2 ring-emerald-500/20' : ''}`}
       >
-        <span className={`text-[12px] md:text-base font-display font-bold text-center leading-snug tracking-tight transition-colors ${isSelected ? 'text-blue-700 dark:text-white' : 'text-slate-800 dark:text-white'}`}>
+        <span className={`text-[9.5px] md:text-xs font-display font-bold text-center leading-tight tracking-tight transition-colors ${isSelected ? 'text-blue-700 dark:text-white' : 'text-slate-800 dark:text-white'}`}>
           {node.label}
         </span>
         {node.isLoading && (
-          <div className="mt-3 flex space-x-1">
-             <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-             <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-             <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce"></div>
+          <div className="mt-1 flex space-x-0.5">
+             <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+             <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+             <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce"></div>
           </div>
         )}
-        {/* Visual indicator for folded node */}
-        {node.isCollapsed && !isSelected && (
-          <div className="absolute -bottom-2 px-2 py-0.5 bg-amber-500 rounded-full text-[8px] font-black text-white uppercase tracking-tighter shadow-lg">Folded</div>
+        {node.isExpanded && node.isCollapsed && !isSelected && (
+          <div className="absolute -bottom-2 px-1.5 py-0.5 bg-amber-500 rounded-full text-[6px] font-black text-white uppercase tracking-tighter shadow-md">Folded</div>
         )}
       </div>
     </div>

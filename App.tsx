@@ -38,23 +38,23 @@ const App: React.FC = () => {
   const [isMinimapOpen, setIsMinimapOpen] = useState(false);
   
   const [activeLevel, setActiveLevel] = useState(0);
-  const [isPagerExpanded, setIsPagerExpanded] = useState(false);
+  const [isLevelSelectorExpanded, setIsLevelSelectorExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [zoom, setZoom] = useState(window.innerWidth < 768 ? 0.8 : 1);
-  const [viewport, setViewport] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [viewport, setViewport] = useState({ x: 0, y: 0, width: window.innerWidth, height: window.innerHeight });
   
   const [searchQuery, setSearchQuery] = useState("");
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
   
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Hyper-tightened spacing to make nodes "almost next to each other"
-  const spacingY = isMobile ? -65 : -95; 
-  const spreadX = isMobile ? 110 : 155;
-  const overlapGap = isMobile ? 120 : 165;
+  // Spacing constants for "almost touching" effect
+  const spacingY = isMobile ? -80 : -100; 
+  const spreadX = isMobile ? 110 : 150;
+  const overlapGap = isMobile ? 130 : 170; 
   
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -85,26 +85,44 @@ const App: React.FC = () => {
     let newNodes = [...allNodes];
     let hasChanged = true;
     let iterations = 0;
-    while (hasChanged && iterations < 50) {
+    const MAX_ITERATIONS = 60;
+
+    while (hasChanged && iterations < MAX_ITERATIONS) {
       hasChanged = false;
       iterations++;
+      
       const maxL = Math.max(...newNodes.map(n => n.level), 0);
       for (let l = 0; l <= maxL; l++) {
-        const levelNodes = newNodes.filter(n => n.level === l).sort((a, b) => a.position.x - b.position.x);
+        const levelNodes = newNodes
+          .filter(n => n.level === l)
+          .sort((a, b) => a.position.x - b.position.x);
+
         for (let i = 0; i < levelNodes.length - 1; i++) {
           const left = levelNodes[i];
           const right = levelNodes[i + 1];
           const dist = right.position.x - left.position.x;
+          
           if (dist < minGap) {
-            const shift = minGap - dist;
+            const shift = (minGap - dist) / 2 + 1;
             hasChanged = true;
-            const descendants = getDescendantIds(newNodes, right.id);
+            
+            const leftDescendants = getDescendantIds(newNodes, left.id);
             newNodes = newNodes.map(n => {
-              if (n.id === right.id || descendants.has(n.id)) {
+              if (n.id === left.id || leftDescendants.has(n.id)) {
+                return { ...n, position: { ...n.position, x: n.position.x - shift } };
+              }
+              return n;
+            });
+
+            const rightDescendants = getDescendantIds(newNodes, right.id);
+            newNodes = newNodes.map(n => {
+              if (n.id === right.id || rightDescendants.has(n.id)) {
                 return { ...n, position: { ...n.position, x: n.position.x + shift } };
               }
               return n;
             });
+            
+            left.position.x -= shift;
             right.position.x += shift;
           }
         }
@@ -197,11 +215,22 @@ const App: React.FC = () => {
       const nodeScreenY = (node.position.y * zoom) - scrollTop;
       const direction = nodeScreenY > clientHeight / 2 ? 'above' : 'below';
       setSelectedNodeDirection(direction);
-      const offsetVal = isMobile ? 60 : 90;
+      const offsetVal = isMobile ? 50 : 70;
       const finalOffsetY = direction === 'above' ? -offsetVal : offsetVal;
       centerOn(node.position.x, node.position.y + finalOffsetY);
     }
   }, [centerOn, isMobile, zoom]);
+
+  const jumpToLevel = useCallback((level: number) => {
+    const levelNodes = nodes.filter(n => n.level === level && isNodeEffectivelyVisible(n));
+    if (levelNodes.length > 0) {
+      const avgX = levelNodes.reduce((acc, n) => acc + n.position.x, 0) / levelNodes.length;
+      const avgY = levelNodes.reduce((acc, n) => acc + n.position.y, 0) / levelNodes.length;
+      setActiveLevel(level);
+      centerOn(avgX, avgY);
+    }
+    setIsLevelSelectorExpanded(false);
+  }, [nodes, isNodeEffectivelyVisible, centerOn]);
 
   const startJourney = async (input: string) => {
     const startX = CANVAS_SIZE / 2;
@@ -234,20 +263,42 @@ const App: React.FC = () => {
       setEdges(newEdges);
       setActiveLevel(nextLevel);
       setTimeout(() => centerOn(startX, targetY), 100);
+      
+      setTimeout(() => {
+        setNodes(prev => prev.map(n => n.parentId === rootId ? { ...n, isNew: false } : n));
+      }, 4000);
     } catch (err) {
       setNodes(prev => prev.map(n => n.id === rootId ? { ...n, isLoading: false } : n));
     }
   };
 
   const expandNode = useCallback(async (parentId: string, label: string, position: { x: number; y: number }, level: number, currentPath: string[]) => {
-    const parentNode = nodes.find(n => n.id === parentId);
-    if (!parentNode || parentNode.isLoading) return;
-    setNodes(prev => prev.map(n => n.id === parentId ? { ...n, isLoading: true, isCollapsed: false, isHidden: false } : n));
+    const nodeToExpand = nodes.find(n => n.id === parentId);
+    if (!nodeToExpand || nodeToExpand.isLoading) return;
+    
+    // Auto-collapse logic: only fold siblings that are actually already expanded (have branches)
+    const updatedNodes = nodes.map(n => {
+      // If node is a sibling and it's not the one we're clicking
+      if (n.parentId === nodeToExpand.parentId && n.id !== nodeToExpand.id && n.level === nodeToExpand.level) {
+        // Only set isCollapsed if it was expanded
+        return n.isExpanded ? { ...n, isCollapsed: true } : n;
+      }
+      // Set the clicked node to not be collapsed
+      if (n.id === nodeToExpand.id) {
+        return { ...n, isLoading: true, isCollapsed: false, isHidden: false };
+      }
+      return n;
+    });
+
+    setSelectedNodeId(null);
+    setNodes(updatedNodes);
+    
     try {
       const allExistingTopics = nodes.map(n => n.label);
       const { topics } = await getRelatedTopics(label, branchCount, currentPath, allExistingTopics);
       const nextLevel = level + 1;
       const targetY = position.y + spacingY;
+      
       setNodes(prev => {
         const totalNew = topics.length;
         const totalBlockWidth = (totalNew - 1) * spreadX;
@@ -257,11 +308,22 @@ const App: React.FC = () => {
         }));
         const newEdges: Edge[] = newNodes.map(node => ({ id: `edge-${parentId}-${node.id}`, from: parentId, to: node.id }));
         setEdges(prevEdges => [...prevEdges, ...newEdges]);
-        setActiveLevel(nextLevel);
-        setTimeout(() => centerOn(position.x, targetY), 100);
+        
         const updatedPrev = prev.map(n => n.id === parentId ? { ...n, isExpanded: true, isLoading: false } : n);
         const combined = [...updatedPrev, ...newNodes];
-        return resolveOverlapsRecursive(combined, overlapGap);
+        const resolved = resolveOverlapsRecursive(combined, overlapGap);
+        
+        const newNodesInResolved = resolved.filter(n => n.parentId === parentId);
+        const avgNewX = newNodesInResolved.reduce((acc, n) => acc + n.position.x, 0) / newNodesInResolved.length;
+        
+        setActiveLevel(nextLevel);
+        setTimeout(() => centerOn(avgNewX, targetY), 150);
+        
+        setTimeout(() => {
+          setNodes(pNodes => pNodes.map(n => n.parentId === parentId ? { ...n, isNew: false } : n));
+        }, 4000);
+        
+        return resolved;
       });
     } catch (err) {
       setNodes(prev => prev.map(n => n.id === parentId ? { ...n, isLoading: false } : n));
@@ -280,8 +342,8 @@ const App: React.FC = () => {
   const closeAllOverlays = useCallback(() => {
     setSelectedNodeId(null);
     setIsOptionsMenuOpen(false);
-    setIsPagerExpanded(false);
-    setIsSearchFocused(false);
+    setIsSearchExpanded(false);
+    setIsLevelSelectorExpanded(false);
   }, []);
 
   const onDragStart = (x: number, y: number) => {
@@ -298,12 +360,13 @@ const App: React.FC = () => {
   };
 
   const isFocusMode = selectedNodeId !== null && !isEditMode;
+  const maxLevel = nodes.length > 0 ? Math.max(...nodes.map(n => n.level)) : 0;
+  const levels = Array.from({ length: maxLevel + 1 }, (_, i) => i);
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-[#e0f2fe] dark:bg-[#030712] text-slate-900 dark:text-white transition-colors duration-500">
       <div className="fixed inset-0 z-0 pointer-events-none" style={{ backgroundImage: theme === 'dark' ? 'radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px)' : 'radial-gradient(circle, rgba(59,130,246,0.08) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
       
-      {/* Dimmer Overlay */}
       <div 
         className={`fixed inset-0 z-[100] bg-slate-950/60 dark:bg-black/80 transition-opacity duration-700 ${isFocusMode ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} 
         onClick={(e) => { e.stopPropagation(); closeAllOverlays(); }}
@@ -326,17 +389,53 @@ const App: React.FC = () => {
         </div>
       ) : (
         <>
-          <div className="fixed top-4 md:top-6 left-4 md:left-6 right-4 md:right-6 flex justify-between items-start z-[3000] pointer-events-none">
-            <div className="flex flex-col items-start space-y-4 pointer-events-auto">
-              <div className={`flex items-center bg-white dark:bg-gray-950 backdrop-blur-2xl rounded-2xl border border-slate-200 dark:border-gray-800 shadow-2xl transition-all ${isPagerExpanded ? 'max-w-[300px] px-2 py-1' : 'px-4 py-2'}`}>
-                <button onClick={(e) => { e.stopPropagation(); setIsPagerExpanded(!isPagerExpanded); }} className="flex items-center space-x-2 font-black text-blue-600 dark:text-blue-400 text-[10px]"><span>GEN {activeLevel}</span><svg className={`w-3 h-3 transition-transform ${isPagerExpanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7" /></svg></button>
-              </div>
+          {/* Top Controls UI - Refined Header for Mobile */}
+          <div className="fixed top-4 md:top-6 left-4 right-4 md:left-6 md:right-6 flex flex-row items-start justify-between z-[3000] pointer-events-none gap-3">
+            
+            {/* Generation Selector */}
+            <div className="flex items-center bg-white dark:bg-gray-950/90 backdrop-blur-2xl rounded-2xl border border-slate-200 dark:border-gray-800 shadow-xl pointer-events-auto p-1 max-w-[calc(100%-60px)] transition-all duration-300">
+               <button 
+                 onClick={(e) => { e.stopPropagation(); setIsLevelSelectorExpanded(!isLevelSelectorExpanded); }}
+                 className="px-3 md:px-4 py-2 text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest flex items-center space-x-2 rounded-xl hover:bg-slate-50 dark:hover:bg-white/5 transition-colors flex-shrink-0"
+               >
+                 <svg className={`w-3.5 h-3.5 transition-transform ${isLevelSelectorExpanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                 <span>Gen {activeLevel}</span>
+               </button>
+               
+               {isLevelSelectorExpanded && (
+                 <div className="flex items-center overflow-x-auto hide-scrollbar space-x-1 px-1 border-l border-slate-100 dark:border-gray-800 ml-1 animate-level-expand">
+                   {levels.map(l => (
+                     <button 
+                       key={l} 
+                       onClick={() => jumpToLevel(l)}
+                       className={`w-9 h-9 flex items-center justify-center rounded-xl text-[11px] font-black transition-all flex-shrink-0 ${activeLevel === l ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5'}`}
+                     >
+                       {l}
+                     </button>
+                   ))}
+                 </div>
+               )}
             </div>
 
-            <div className={`absolute left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-auto transition-all ${isSearchFocused ? 'w-[calc(100vw-32px)]' : 'w-[140px] md:w-[450px]'}`}>
-              <div className={`flex items-center bg-white dark:bg-gray-900 border-2 rounded-xl md:rounded-2xl shadow-xl overflow-hidden h-10 md:h-12 w-full transition-all ${isSearchFocused ? 'border-blue-500' : 'border-slate-200 dark:border-gray-800'}`}>
-                <div className="px-3 md:px-4 text-slate-400"><svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg></div>
-                <input type="text" placeholder="Search..." className="w-full bg-transparent border-none text-[12px] font-bold focus:ring-0 outline-none text-slate-900 dark:text-white" value={searchQuery} onFocus={() => setIsSearchFocused(true)} onChange={e => setSearchQuery(e.target.value)} />
+            {/* Collapsible Search - Added max-w constraints for desktop */}
+            <div className={`relative flex items-center pointer-events-auto transition-all duration-500 ease-out ${isSearchExpanded ? 'flex-grow md:max-w-sm' : 'w-12 md:w-14'}`}>
+              <div className={`flex items-center bg-white dark:bg-gray-900 border-2 rounded-2xl shadow-xl overflow-hidden h-12 md:h-14 w-full transition-all duration-500 ${isSearchExpanded ? 'border-blue-500' : 'border-slate-200 dark:border-gray-800'}`}>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setIsSearchExpanded(!isSearchExpanded); }}
+                  className="px-4 text-slate-500 dark:text-slate-400 hover:text-blue-500 transition-colors flex-shrink-0"
+                >
+                  <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                </button>
+                {isSearchExpanded && (
+                  <input 
+                    type="text" 
+                    autoFocus
+                    placeholder="Search details..." 
+                    className="w-full bg-transparent border-none text-[13px] font-bold focus:ring-0 outline-none text-slate-900 dark:text-white pr-4 animate-fade-in" 
+                    value={searchQuery} 
+                    onChange={e => setSearchQuery(e.target.value)} 
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -406,7 +505,7 @@ const App: React.FC = () => {
             <div className="flex flex-col space-y-3">
               <button 
                 onClick={(e) => { e.stopPropagation(); reAlignMap(); }} 
-                className="w-12 h-12 md:w-14 md:h-14 flex items-center justify-center rounded-full bg-white dark:bg-gray-900 shadow-2xl border border-slate-200 dark:border-gray-800 text-slate-600 dark:text-slate-300 hover:text-blue-500 hover:scale-110 active:scale-95 transition-all"
+                className="w-14 h-14 flex items-center justify-center rounded-full bg-white dark:bg-gray-900 shadow-2xl border border-slate-200 dark:border-gray-800 text-slate-600 dark:text-slate-300 hover:text-blue-500 hover:scale-110 active:scale-95 transition-all"
                 title="Center View"
               >
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
@@ -415,26 +514,27 @@ const App: React.FC = () => {
                 </svg>
               </button>
 
-              {/* Toggle Button / Edit Pill */}
               {isEditMode ? (
                 <button 
                   onClick={(e) => { e.stopPropagation(); setIsEditMode(false); }} 
                   className="flex items-center space-x-3 px-6 py-3 rounded-full bg-emerald-500 text-white border border-emerald-400 shadow-[0_10px_30px_rgba(16,185,129,0.4)] hover:bg-emerald-400 hover:scale-105 active:scale-95 transition-all animate-pill-pop"
                 >
-                  <span className="text-[10px] font-black uppercase tracking-widest">Edit Mode</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest">Done Editing</span>
                   <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="4">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
                 </button>
               ) : (
                 <button 
                   onClick={(e) => { e.stopPropagation(); setIsOptionsMenuOpen(!isOptionsMenuOpen); }} 
-                  className="w-12 h-12 md:w-14 md:h-14 flex items-center justify-center rounded-full bg-white dark:bg-gray-900 shadow-2xl border border-slate-200 dark:border-gray-800 text-slate-400 hover:text-blue-500 hover:scale-110 transition-all"
+                  className={`w-14 h-14 flex items-center justify-center rounded-full bg-white dark:bg-gray-900 shadow-2xl border transition-all ${isOptionsMenuOpen ? 'border-blue-500 text-blue-500 ring-4 ring-blue-500/10' : 'border-slate-200 dark:border-gray-800 text-slate-400 hover:text-blue-500 hover:scale-110'}`}
                 >
-                  <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 12h.01M12 12h.01M19 12h.01" />
+                  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="12" r="2.5" />
+                    <circle cx="12" cy="5" r="2.5" />
+                    <circle cx="12" cy="19" r="2.5" />
                   </svg>
                 </button>
               )}
@@ -448,8 +548,8 @@ const App: React.FC = () => {
             </div>
             
             <Minimap nodes={nodes.filter(isNodeEffectivelyVisible)} canvasSize={CANVAS_SIZE} viewport={viewport} isOpen={isMinimapOpen} onToggle={() => setIsMinimapOpen(!isMinimapOpen)} isMobile={isMobile} />
-            <button onClick={(e) => { e.stopPropagation(); setIsMinimapOpen(!isMinimapOpen); }} className={`w-12 h-12 md:w-14 md:h-14 flex items-center justify-center rounded-2xl transition-all shadow-2xl border ${isMinimapOpen ? 'bg-blue-600 border-blue-400 text-white' : 'bg-white dark:bg-gray-950 border-slate-200 dark:border-gray-800 text-slate-500'}`}>
-              <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            <button onClick={(e) => { e.stopPropagation(); setIsMinimapOpen(!isMinimapOpen); }} className={`w-14 h-14 flex items-center justify-center rounded-2xl transition-all shadow-2xl border ${isMinimapOpen ? 'bg-blue-600 border-blue-400 text-white' : 'bg-white dark:bg-gray-950 border-slate-200 dark:border-gray-800 text-slate-500 hover:scale-105'}`}>
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
             </button>
           </div>
 
@@ -460,6 +560,27 @@ const App: React.FC = () => {
             }
             .animate-pill-pop {
               animation: pill-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            }
+            @keyframes menu-pop {
+              0% { transform: scale(0.95); opacity: 0; }
+              100% { transform: scale(1); opacity: 1; }
+            }
+            .animate-menu-pop {
+              animation: menu-pop 0.2s cubic-bezier(0, 0, 0.2, 1);
+            }
+            @keyframes level-expand {
+              0% { width: 0; opacity: 0; transform: translateX(-10px); }
+              100% { width: auto; opacity: 1; transform: translateX(0); }
+            }
+            .animate-level-expand {
+              animation: level-expand 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            }
+            @keyframes fade-in {
+              from { opacity: 0; transform: translateX(-5px); }
+              to { opacity: 1; transform: translateX(0); }
+            }
+            .animate-fade-in {
+              animation: fade-in 0.3s ease-out forwards;
             }
           `}</style>
         </>
