@@ -51,7 +51,6 @@ const App: React.FC = () => {
   
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Spacing constants for "almost touching" effect
   const spacingY = isMobile ? -80 : -100; 
   const spreadX = isMobile ? 110 : 150;
   const overlapGap = isMobile ? 130 : 170; 
@@ -244,21 +243,26 @@ const App: React.FC = () => {
     setActiveLevel(0);
     setInitialInput("");
     setTimeout(() => centerOn(startX, startY, 'auto'), 50);
+    
     try {
       const exclude = [input];
       const [topicInfo, relatedTopics] = await Promise.all([
         getTopicInfo(input), 
         getRelatedTopics(input, branchCount, [input], exclude)
       ]);
+      
       const nextLevel = 1;
       const targetY = startY + spacingY;
       const totalBlockWidth = (branchCount - 1) * spreadX;
       const startXChildren = startX - totalBlockWidth / 2;
+      
       const children: ThoughtNode[] = relatedTopics.topics.map((item, index) => ({
         id: `node-initial-${Date.now()}-${index}`, label: item.topic, description: item.description, parentId: rootId, level: nextLevel, position: { x: startXChildren + (index * spreadX), y: targetY }, isExpanded: false, isLoading: false, isNew: true, sources: [], path: [input, item.topic]
       }));
+      
       const newEdges: Edge[] = children.map(node => ({ id: `edge-${rootId}-${node.id}`, from: rootId, to: node.id }));
       const finalNodes = [{ ...rootNode, description: topicInfo.description, sources: topicInfo.sources, isLoading: false, isExpanded: true }, ...children];
+      
       setNodes(resolveOverlapsRecursive(finalNodes, overlapGap));
       setEdges(newEdges);
       setActiveLevel(nextLevel);
@@ -268,7 +272,9 @@ const App: React.FC = () => {
         setNodes(prev => prev.map(n => n.parentId === rootId ? { ...n, isNew: false } : n));
       }, 4000);
     } catch (err) {
-      setNodes(prev => prev.map(n => n.id === rootId ? { ...n, isLoading: false } : n));
+      console.error("Start Journey Error:", err);
+      // Fallback: stop loading so user isn't stuck
+      setNodes(prev => prev.map(n => n.id === rootId ? { ...n, isLoading: false, description: "Failed to gather insights. Please check your API key and connection." } : n));
     }
   };
 
@@ -276,14 +282,10 @@ const App: React.FC = () => {
     const nodeToExpand = nodes.find(n => n.id === parentId);
     if (!nodeToExpand || nodeToExpand.isLoading) return;
     
-    // Auto-collapse logic: only fold siblings that are actually already expanded (have branches)
     const updatedNodes = nodes.map(n => {
-      // If node is a sibling and it's not the one we're clicking
       if (n.parentId === nodeToExpand.parentId && n.id !== nodeToExpand.id && n.level === nodeToExpand.level) {
-        // Only set isCollapsed if it was expanded
         return n.isExpanded ? { ...n, isCollapsed: true } : n;
       }
-      // Set the clicked node to not be collapsed
       if (n.id === nodeToExpand.id) {
         return { ...n, isLoading: true, isCollapsed: false, isHidden: false };
       }
@@ -326,6 +328,7 @@ const App: React.FC = () => {
         return resolved;
       });
     } catch (err) {
+      console.error("Expand Node Error:", err);
       setNodes(prev => prev.map(n => n.id === parentId ? { ...n, isLoading: false } : n));
     }
   }, [branchCount, spacingY, spreadX, overlapGap, centerOn, resolveOverlapsRecursive, nodes]);
@@ -389,10 +392,7 @@ const App: React.FC = () => {
         </div>
       ) : (
         <>
-          {/* Top Controls UI - Refined Header for Mobile */}
           <div className="fixed top-4 md:top-6 left-4 right-4 md:left-6 md:right-6 flex flex-row items-start justify-between z-[3000] pointer-events-none gap-3">
-            
-            {/* Generation Selector */}
             <div className="flex items-center bg-white dark:bg-gray-950/90 backdrop-blur-2xl rounded-2xl border border-slate-200 dark:border-gray-800 shadow-xl pointer-events-auto p-1 max-w-[calc(100%-60px)] transition-all duration-300">
                <button 
                  onClick={(e) => { e.stopPropagation(); setIsLevelSelectorExpanded(!isLevelSelectorExpanded); }}
@@ -417,7 +417,6 @@ const App: React.FC = () => {
                )}
             </div>
 
-            {/* Collapsible Search - Added max-w constraints for desktop */}
             <div className={`relative flex items-center pointer-events-auto transition-all duration-500 ease-out ${isSearchExpanded ? 'flex-grow md:max-w-sm' : 'w-12 md:w-14'}`}>
               <div className={`flex items-center bg-white dark:bg-gray-900 border-2 rounded-2xl shadow-xl overflow-hidden h-12 md:h-14 w-full transition-all duration-500 ${isSearchExpanded ? 'border-blue-500' : 'border-slate-200 dark:border-gray-800'}`}>
                 <button 
