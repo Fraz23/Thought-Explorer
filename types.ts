@@ -4,6 +4,12 @@ export interface GroundingSource {
   uri: string;
 }
 
+export interface Citation {
+  startIndex: number;
+  endIndex: number;
+  sourceIndex: number;
+}
+
 export interface ThoughtNode {
   id: string;
   label: string;
@@ -17,6 +23,7 @@ export interface ThoughtNode {
   isHidden?: boolean;
   isNew?: boolean;
   sources?: GroundingSource[];
+  citations?: Citation[];
   path: string[];
 }
 
